@@ -208,23 +208,6 @@ def stop_following(follow_id):
 
     return redirect(f"/users/{g.user.id}/following")
 
-@app.route("/users/add_like/<int:message_id>", methods=["POST"])
-def like_message(message_id):
-    """Like / Unlike a message."""
-    if not g.user:
-        flash("You have to be signed in to like a warble.", "danger")
-        return redirect("/")
-    message = Message.query.get_or_404(message_id)
-    if message.user_id == g.user.id:
-        flash("Cannot like your own warbles.", "danger")
-        return redirect("/")
-    liked_messages_ids = [msg.id for msg in g.user.likes]
-    if message_id in liked_messages_ids:
-        g.user.likes.remove(message)
-    else: g.user.likes.append(message)
-    db.session.commit()
-    return redirect("/")
-
 
 @app.route('/users/profile', methods=["GET", "POST"])
 def profile():
@@ -265,6 +248,37 @@ def delete_user():
     db.session.commit()
 
     return redirect("/signup")
+
+
+##############################################################################
+# Likes routes:
+
+@app.route("/users/add_like/<int:message_id>", methods=["POST"])
+def like_message(message_id):
+    """Like / Unlike a message."""
+    if not g.user:
+        flash("You have to be signed in to like a warble.", "danger")
+        return redirect("/")
+    message = Message.query.get_or_404(message_id)
+    if message.user_id == g.user.id:
+        flash("Cannot like your own warbles.", "danger")
+        return redirect("/")
+    liked_messages_ids = [msg.id for msg in g.user.likes]
+    if message_id in liked_messages_ids:
+        g.user.likes.remove(message)
+    else: g.user.likes.append(message)
+    db.session.commit()
+    return redirect("/")
+
+@app.route("/users/<int:user_id>/likes")
+def show_likes(user_id):
+    """shows a list of all the liked messages by a user"""
+    if not g.user:
+        flash("You must sign in.", "danger")
+        return redirect("/")
+    user = User.query.get_or_404(user_id)
+    liked_messages = user.likes
+    return render_template("users/show.html", messages=liked_messages, user=user)
 
 
 ##############################################################################
