@@ -4,11 +4,10 @@
 #
 #    FLASK_ENV=production python -m unittest test_message_views.py
 
-
 import os
 from unittest import TestCase
 
-from models import db, connect_db, Message, User
+from models import db, connect_db, Message, User, bcrypt
 
 # BEFORE we import our app, let's set an environmental variable
 # to use a different database for tests (we need to do this
@@ -32,6 +31,8 @@ db.create_all()
 
 app.config['WTF_CSRF_ENABLED'] = False
 
+app.config["TESTING"] = True
+app.config["DEBUG_TB_HOSTS"] = ["dont-show-debug-toolbar"]
 
 class MessageViewTestCase(TestCase):
     """Test views for messages."""
@@ -46,10 +47,15 @@ class MessageViewTestCase(TestCase):
 
         self.testuser = User.signup(username="testuser",
                                     email="test@test.com",
-                                    password="testuser",
+                                    password=bcrypt.generate_password_hash("testuser").decode("utf-8"),
                                     image_url=None)
 
         db.session.commit()
+    
+    def tearDown(self):
+        """clean up the session"""
+
+        db.session.rollback()
 
     def test_add_message(self):
         """Can use add a message?"""
@@ -71,3 +77,45 @@ class MessageViewTestCase(TestCase):
 
             msg = Message.query.one()
             self.assertEqual(msg.text, "Hello")
+    
+    def test_new_message_page(self):
+        """does the new message show up?"""
+
+        with self.client.session_transaction() as sess:
+            sess[CURR_USER_KEY] = self.testuser.id
+
+        resp = self.client.post("/messages/new", data={"text": "please"}, follow_redirects=True)
+        html = resp.get_data(as_text=True)
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("please", html)
+    
+    def test_messages_show(self):
+        """does the page show the right message?"""
+
+        with self.client.session_transaction() as sess:
+            sess[CURR_USER_KEY] = self.testuser.id
+
+        m = Message(text="secret thing here", user_id=self.testuser.id)
+        db.session.add(m)
+        db.session.commit()
+        resp = self.client.get(f"/messages/{m.id}")
+        html = resp.get_data(as_text=True)
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("secret thing here", html)
+    
+    def test_messages_destroy(self):
+        """tests if message gets deleted"""
+
+        with self.client.session_transaction() as sess:
+            sess[CURR_USER_KEY] = self.testuser.id
+
+        m = Message(text="secret thing here", user_id=self.testuser.id)
+        db.session.add(m)
+        db.session.commit()
+
+        self.assertEqual(len(Message.query.all()), 1)
+
+        self.client.post(f"/messages/{m.id}/delete")
+        self.assertEqual(len(Message.query.all()), 0)
