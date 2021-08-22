@@ -208,6 +208,23 @@ def stop_following(follow_id):
 
     return redirect(f"/users/{g.user.id}/following")
 
+@app.route("/users/add_like/<int:message_id>", methods=["POST"])
+def like_message(message_id):
+    """Like / Unlike a message."""
+    if not g.user:
+        flash("You have to be signed in to like a warble.", "danger")
+        return redirect("/")
+    message = Message.query.get_or_404(message_id)
+    if message.user_id == g.user.id:
+        flash("Cannot like your own warbles.", "danger")
+        return redirect("/")
+    liked_messages_ids = [msg.id for msg in g.user.likes]
+    if message_id in liked_messages_ids:
+        g.user.likes.remove(message)
+    else: g.user.likes.append(message)
+    db.session.commit()
+    return redirect("/")
+
 
 @app.route('/users/profile', methods=["GET", "POST"])
 def profile():
@@ -319,8 +336,9 @@ def homepage():
                     .order_by(Message.timestamp.desc())
                     .limit(100)
                     .all())
+        likes = [msg.id for msg in g.user.likes]
 
-        return render_template('home.html', messages=messages)
+        return render_template('home.html', messages=messages, likes=likes)
 
     else:
         return render_template('home-anon.html')
